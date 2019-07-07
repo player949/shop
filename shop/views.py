@@ -1,11 +1,13 @@
-from shop import app, db
+# -*- encoding=UTF-8 -*-
+from B2B import app, db, mq
 from flask import render_template, redirect, request, flash, get_flashed_messages, jsonify
-from shop.models import User, GoodType, Good, InboundLoad, outboudLoad, warningLoad, Order, Warehouse, Cart
-from flask_login import login_user, logout_user, login_required,current_user
+from B2B.models import User, GoodType, Good, InboundLoad, outboudLoad, warningLoad, Order, Warehouse, Cart
+from flask_login import login_user, logout_user, login_required, current_user
 import hashlib
 import datetime
 
 # 路由管理
+
 
 #默认主页
 @app.route('/')
@@ -60,6 +62,13 @@ def contact():
     return render_template("contact.html", current_user=current_user)
 
 
+@app.route('/renzheng/')
+@login_required
+def renzheng():
+    return render_template('renzheng.html')
+
+
+
 # 商品详情页
 @app.route('/detail/<gid>')
 @login_required
@@ -72,25 +81,14 @@ def detail(gid):
     return render_template("detail.html", content=content, images=images, trade_price=trade_price, retail_price=retail_price, gid = gid)
 
 
-@app.route('/detail/<gid>/<msg>')
-@login_required
-def detail_1(gid, msg):
-    good = Good.query.filter_by(id=gid).all()[0]
-    content = good.content
-    images = good.images.filter_by(istitle=0)
-    trade_price = good.trade_price
-    retail_price = good.retail_price
-    print(msg)
-    return render_template("detail.html", content=content, images=images, trade_price=trade_price, retail_price=retail_price, gid=gid, msg=msg)
-
-
 #商品种类管理页
 @app.route('/type/')
 def type():
     types = GoodType.query.all()
     return render_template('type.html',types = types)
 
-#仓库管理页
+
+# 仓库管理页
 @app.route('/warehouse/')
 def warehouse():
     warehouses = Warehouse.query.all()
@@ -146,12 +144,18 @@ def admin():
     return render_template('admin.html')
 
 
+
+
 @app.route('/regloginpage/')
 def regloginpage():
     msg = ''
     for m in get_flashed_messages(with_categories=False, category_filter=['reglogin']):
         msg = msg + m
     return render_template("login.html", msg=msg)
+
+@app.route('/react/')
+def react_test():
+    return render_template('react.html')
 
 
 # 业务逻辑
@@ -352,12 +356,14 @@ def addwarning():
     db.session.commit()
     return redirect('/warning/')
 
+
 @app.route('/delete_warning/', methods={'get', 'post'})
 def delete_warning():
     tid = request.form['id']
     warningLoad.query.filter_by(id = tid).delete()
     db.session.commit()
     return jsonify({"msg": 'success' })
+
 
 @app.route('/edit_warning/', methods={'get', 'post'})
 def edit_warning():
@@ -370,14 +376,6 @@ def edit_warning():
     db.session.commit()
     return jsonify({'msg' : 'OK'})
 
-@app.route('/FBI_warning/', methods={'get', 'post'})
-def FBI_warning():
-    hello = request.values.get('hello').strip()
-    warning_list = warningLoad.query.all()
-    for a in warning_list:
-        if int(a.quantity) > int(Good.query.filter_by(name=a.name,warehouse_name=a.warehouse_name).all()[0].quantity):
-            return jsonify({'msg' : 'warning'})
-    return jsonify({'msg' : hello})
 
 @app.route('/changepassword/', methods={'get', 'post'})
 def changepassword():
@@ -471,6 +469,7 @@ def delete_warehouse():
     db.session.commit()
     return jsonify({"msg": 'success' })
 
+
 @app.route('/edit_warehouse/', methods={'get', 'post'})
 def edit_warehouse():
     id = request.form['id']
@@ -484,11 +483,11 @@ def edit_warehouse():
 
 @app.route('/add_cart/<gid>', methods={'get', 'post'})
 def add_cart(gid):
-    quantity = request.values.get('quantity')
+    quantity = request.form['quantity']
+    gid = request.form['gid']
     db.session.add(Cart(current_user.id, gid, quantity))
     db.session.commit()
-    msg = '添加成功'
-    return redirect('/detail/'+str(gid)+'/'+msg)
+    return jsonify({'msg' : 'OK'})
 
 
 @app.route('/add_myorder/<gid>', methods={'get', 'post'})
@@ -632,3 +631,17 @@ def login():
     else:
         flash('密码错误，请重新输入', 'reglogin')
         return redirect('/regloginpage/')
+
+
+@app.route('/InventoryWarner/', methods={'get'})
+def check_inventory():
+    inbound = mq.InboundMaker()
+    warning = mq.WarningMaker()
+    remove = mq.WareRemover()
+    inventory_alerter = mq.InventoryWarner()
+    inventory_alerter.addObserver(inbound)
+    inventory_alerter.addObserver(warning)
+    inventory_alerter.addObserver(remove)
+    if inventory_alerter.isShort():
+        inventory_alerter.notifyAll()
+    return jsonify({'msg': inventory_alerter.action})

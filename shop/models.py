@@ -1,4 +1,5 @@
-from shop import db, login_manager
+# -*- encoding=UTF-8 -*-
+from B2B import db, login_manager
 
 
 class User(db.Model):
