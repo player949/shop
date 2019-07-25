@@ -484,10 +484,9 @@ def edit_warehouse():
 @app.route('/add_cart/<gid>', methods={'get', 'post'})
 def add_cart(gid):
     quantity = request.form['quantity']
-    gid = request.form['gid']
     db.session.add(Cart(current_user.id, gid, quantity))
     db.session.commit()
-    return jsonify({'msg' : 'OK'})
+    return redirect('/cart')
 
 
 @app.route('/add_myorder/<gid>', methods={'get', 'post'})
